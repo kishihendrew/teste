@@ -1,84 +1,61 @@
 ---
-- name: Configurar Servidor Local (Update, Docker e Git) - Compatível com Debian 13
+- name: Configurar Docker localmente no Debian 13
   hosts: localhost
-  become: yes
+  become: true
   connection: local
 
   tasks:
-
-    - name: 1.1 - Atualizar o cache de pacotes
-      apt:
+    - name: Atualizar cache de pacotes (update)
+      ansible.builtin.apt:
         update_cache: yes
-      tags: [update]
 
-    - name: 1.2 - Atualizar todos os pacotes do sistema
-      apt:
-        upgrade: dist
-      tags: [update]
+    - name: Atualizar pacotes instalados (upgrade)
+      ansible.builtin.apt:
+        upgrade: yes
 
-    - name: 2.1 - Instalar o Git
-      apt:
-        name: git
-        state: present
-      tags: [git]
-
-    - name: 3.1 - Instalar pacotes de pré-requisito para o Docker
-      apt:
+    - name: Instalar pacotes necessários
+      ansible.builtin.apt:
         name:
-          - apt-transport-https
           - ca-certificates
           - curl
           - gnupg
           - lsb-release
         state: present
-      tags: [docker]
 
-    - name: 3.2 - Baixar e salvar a chave GPG oficial do Docker (novo método)
+    - name: Criar diretório para chaves GPG
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Baixar chave GPG oficial do Docker
       ansible.builtin.get_url:
         url: https://download.docker.com/linux/debian/gpg
-        dest: /usr/share/keyrings/docker-archive-keyring.gpg
+        dest: /etc/apt/keyrings/docker.gpg
         mode: '0644'
-      tags: [docker]
 
-    - name: 3.3 - Adicionar o repositório do Docker ao sistema
+    - name: Adicionar repositório oficial do Docker
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable"
         state: present
         filename: docker
-      tags: [docker]
 
-    - name: 3.4 - Instalar o Docker Engine, CLI e Compose
-      apt:
+    - name: Atualizar cache de pacotes novamente
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Instalar Docker Engine e Compose
+      ansible.builtin.apt:
         name:
           - docker-ce
           - docker-ce-cli
           - containerd.io
+          - docker-buildx-plugin
           - docker-compose-plugin
         state: present
-        update_cache: yes
-      tags: [docker]
 
-    - name: 3.5 - Garantir que o serviço do Docker esteja iniciado e habilitado
-      service:
+    - name: Habilitar e iniciar serviço do Docker
+      ansible.builtin.systemd:
         name: docker
-        state: started
         enabled: yes
-      tags: [docker]
-
-    - name: 3.6 - Adicionar o usuário atual ao grupo docker
-      user:
-        name: "{{ lookup('env', 'USER') }}"
-        groups: docker
-        append: yes
-      tags: [docker]
-
-    - name: 4.1 - Testar instalação do Docker
-      command: docker --version
-      register: docker_version
-      changed_when: false
-      tags: [docker]
-
-    - name: 4.2 - Exibir versão do Docker instalada
-      debug:
-        msg: "Docker instalado com sucesso: {{ docker_version.stdout }}"
-      tags: [docker]
+        state: started
